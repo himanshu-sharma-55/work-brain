@@ -2,6 +2,8 @@
 
 Local MCP server for **Claude Code** (including inside Cursor). Gives Claude your playbook, weekly agenda, and work history.
 
+**Repo:** [github.com/himanshu-sharma-55/work-brain](https://github.com/himanshu-sharma-55/work-brain)
+
 ## What it does
 
 | Tool | Purpose |
@@ -23,15 +25,16 @@ Claude reads these when you ask. It updates the board when work is clear. No nag
 Requires **Node.js 22+** (uses built-in `node:sqlite`, no native deps).
 
 ```bash
-cd workbrain
+git clone https://github.com/himanshu-sharma-55/work-brain.git
+cd work-brain
 npm install
 node bin/install.js
 ```
 
-Then register with Claude Code:
+Then register with Claude Code (MCP server name is `workbrain`, independent of repo name):
 
 ```bash
-claude mcp add --scope user workbrain -- node /ABSOLUTE/PATH/TO/workbrain/src/index.js
+claude mcp add --scope user workbrain -- node /ABSOLUTE/PATH/TO/work-brain/src/index.js
 ```
 
 In the Claude Code panel: type `/mcp` → confirm **workbrain** is connected.
@@ -45,17 +48,17 @@ Edit your playbook: `~/.workbrain/playbook.md`
 ### Option A — Clone the repo (recommended)
 
 ```bash
-git clone <your-repo-url> ~/workbrain
-cd ~/workbrain/workbrain
+git clone https://github.com/himanshu-sharma-55/work-brain.git ~/work-brain
+cd ~/work-brain
 npm install
-claude mcp add --scope user workbrain -- node ~/workbrain/workbrain/src/index.js
+claude mcp add --scope user workbrain -- node ~/work-brain/src/index.js
 ```
 
 Each machine gets its own `~/.workbrain/` data unless you sync it (see below).
 
 ### Option B — Copy only the folder
 
-Copy the `workbrain/` directory to the other machine, run `npm install`, then `claude mcp add` with that machine's absolute path.
+Copy the repo directory to the other machine, run `npm install`, then `claude mcp add` with that machine's absolute path.
 
 ### Option C — npm link (dev)
 
@@ -88,7 +91,7 @@ Set a custom data dir on any machine:
 
 ```bash
 export WORKBRAIN_HOME=/path/to/shared/workbrain-data
-claude mcp add --scope user workbrain -- env WORKBRAIN_HOME=/path/to/shared/workbrain-data node ~/workbrain/src/index.js
+claude mcp add --scope user workbrain -- env WORKBRAIN_HOME=/path/to/shared/workbrain-data node ~/work-brain/src/index.js
 ```
 
 ---
@@ -115,7 +118,7 @@ Ask in chat:
 Set `WORKBRAIN_ROOT` to your install path:
 
 ```bash
-export WORKBRAIN_ROOT=/path/to/workbrain
+export WORKBRAIN_ROOT=/path/to/work-brain
 cp $WORKBRAIN_ROOT/hooks/post-commit .git/hooks/post-commit
 chmod +x .git/hooks/post-commit
 ```
@@ -131,7 +134,7 @@ Create `.mcp.json` at project root:
   "mcpServers": {
     "workbrain": {
       "command": "node",
-      "args": ["/absolute/path/to/workbrain/src/index.js"]
+      "args": ["/absolute/path/to/work-brain/src/index.js"]
     }
   }
 }
@@ -161,4 +164,4 @@ Override: `WORKBRAIN_HOME=/custom/path`
 
 ## License
 
-MIT
+See [LICENSE](LICENSE).
