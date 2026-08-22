@@ -49,6 +49,11 @@ function migrate(database) {
     CREATE INDEX IF NOT EXISTS idx_agenda_week ON agenda_items(week_start);
     CREATE INDEX IF NOT EXISTS idx_work_created ON work_entries(created_at);
   `);
+
+  const workCols = database.prepare("PRAGMA table_info(work_entries)").all();
+  if (!workCols.some((c) => c.name === "agenda_item_id")) {
+    database.exec(`ALTER TABLE work_entries ADD COLUMN agenda_item_id INTEGER`);
+  }
 }
 
 export function weekStart(date = new Date()) {

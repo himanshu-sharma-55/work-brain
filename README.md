@@ -1,28 +1,46 @@
 # Workbrain
 
-Local MCP server for **Claude Code** (including inside Cursor). Gives Claude your playbook, weekly agenda, and work history.
+**Your personal operating layer for AI-assisted work.**
 
-**Repo:** [github.com/himanshu-sharma-55/work-brain](https://github.com/himanshu-sharma-55/work-brain)
-
-## What it does
-
-| Tool | Purpose |
-|------|---------|
-| `get_playbook` | How you work, fix bugs, communicate |
-| `get_agenda` | This week's focus, coming up, expected |
-| `add_agenda_item` | Add to the board |
-| `update_agenda_item` | Mark done / in progress / deferred |
-| `get_work_log` | Recent work summaries |
-| `log_work` | Claude logs what you shipped |
-| `get_commits` | Git commits (via hook) |
-
-Claude reads these when you ask. It updates the board when work is clear. No nagging.
+Workbrain is a local [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for [Claude Code](https://code.claude.com). It gives Claude persistent context about how you work, what you're focused on this week, and what you've shipped — without sending that data to the cloud or sharing it with your team.
 
 ---
 
-## Build & install (this machine)
+## Overview
 
-Requires **Node.js 22+** (uses built-in `node:sqlite`, no native deps).
+Most AI coding setups tell the model *how to behave* (rules, prompts). Workbrain tells it *what you're doing* — and lets it keep that picture up to date as you work.
+
+| Layer | What it stores | Example |
+|-------|----------------|---------|
+| **Playbook** | How you work | Bug-fix approach, communication style |
+| **Agenda** | What you're focused on | This week's priorities and deliverables |
+| **Work log** | What you shipped | Summaries linked to agenda items |
+| **Commits** | Raw git activity | Auto-captured via optional hook |
+
+Everything lives on your machine in `~/.workbrain/`. Nothing is committed to project repos unless you choose to.
+
+---
+
+## Features
+
+- **Unified context** — `get_context` returns playbook, agenda, work log, and commits in a single call
+- **Living weekly board** — Claude can add, update, and complete agenda items during a session
+- **Automatic work logging** — marking an agenda item done creates a linked work log entry
+- **Local-first & private** — SQLite + markdown on disk; no accounts, no cloud sync required
+- **Cross-project** — registered at user scope; follows you across every repo
+- **Git integration** — optional post-commit hook records commits automatically
+- **CLI** — check your week from the terminal without opening Claude
+
+---
+
+## Requirements
+
+- **Node.js 22+** (uses built-in `node:sqlite` — no native dependencies)
+- **Claude Code** CLI or extension (Cursor, VS Code, or terminal)
+
+---
+
+## Quick start
 
 ```bash
 git clone https://github.com/himanshu-sharma-55/work-brain.git
@@ -31,137 +49,226 @@ npm install
 node bin/install.js
 ```
 
-Then register with Claude Code (MCP server name is `workbrain`, independent of repo name):
+Register the MCP server (server name is `workbrain`; repo folder is `work-brain`):
 
 ```bash
-claude mcp add --scope user workbrain -- node /ABSOLUTE/PATH/TO/work-brain/src/index.js
+claude mcp add --scope user workbrain -- node /absolute/path/to/work-brain/src/index.js
 ```
 
-In the Claude Code panel: type `/mcp` → confirm **workbrain** is connected.
+Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export WORKBRAIN_ROOT=/absolute/path/to/work-brain
+```
+
+Verify in Claude Code: type `/mcp` and confirm **workbrain** is connected.
 
 Edit your playbook: `~/.workbrain/playbook.md`
 
 ---
 
-## Use on another machine
+## How it works
 
-### Option A — Clone the repo (recommended)
-
-```bash
-git clone https://github.com/himanshu-sharma-55/work-brain.git ~/work-brain
-cd ~/work-brain
-npm install
-claude mcp add --scope user workbrain -- node ~/work-brain/src/index.js
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Claude Code                         │
+│              (Cursor / VS Code / CLI)                   │
+└────────────────────────┬────────────────────────────────┘
+                         │ MCP (stdio)
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                  Workbrain Server                       │
+│  get_context · get_agenda · log_work · get_commits …   │
+└────────────────────────┬────────────────────────────────┘
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+   playbook.md       data.db      git hook (optional)
+   (how you work)   (agenda,       (commit capture)
+                     work log,
+                     commits)
+          └──────────────┴──────────────┘
+                         │
+                    ~/.workbrain/
+                    (or WORKBRAIN_HOME)
 ```
 
-Each machine gets its own `~/.workbrain/` data unless you sync it (see below).
+Claude calls Workbrain tools on demand — your rules aren't loaded into every message, keeping context lean until it's needed.
 
-### Option B — Copy only the folder
+---
 
-Copy the repo directory to the other machine, run `npm install`, then `claude mcp add` with that machine's absolute path.
+## MCP tools
 
-### Option C — npm link (dev)
+| Tool | Description |
+|------|-------------|
+| `get_context` | **Recommended entry point.** Playbook, current agenda, recent work log, and commits |
+| `get_playbook` | Read your personal playbook |
+| `update_playbook` | Replace or append to your playbook |
+| `get_agenda` | Weekly board: focus, coming up, expected |
+| `add_agenda_item` | Add an item to the board |
+| `update_agenda_item` | Update status, title, estimate, etc. Auto-logs work when marked done |
+| `delete_agenda_item` | Remove an agenda item |
+| `rollover_agenda` | Move unfinished items from last week to the current week |
+| `get_weekly_summary` | Agenda stats, work log, and commits for a given week |
+| `get_work_log` | Recent work summaries |
+| `log_work` | Log what you shipped (optionally linked to an agenda item) |
+| `get_commits` | Recent commits captured by the git hook |
+
+### Recommended session flow
+
+Add this to your **personal** Cursor or Claude rules:
+
+> At the start of a work session, call `get_context`. When we finish a clear task, update the agenda and log work. Marking an agenda item done is enough — it auto-logs.
+
+### Example prompts
+
+| You say | Workbrain does |
+|---------|----------------|
+| "What's my focus this week?" | Calls `get_context` |
+| "Mark CSV export as in progress" | Calls `update_agenda_item` |
+| "What did I ship this week?" | Calls `get_weekly_summary` |
+| "Roll over unfinished items" | Calls `rollover_agenda` |
+| "How do I usually fix bugs?" | Reads playbook |
+
+---
+
+## CLI
+
+Check status without Claude:
 
 ```bash
-cd workbrain && npm link
-claude mcp add --scope user workbrain -- workbrain
+node bin/workbrain.js status     # current week at a glance
+node bin/workbrain.js summary    # full week recap
+npm run status                   # shortcut via package script
 ```
 
 ---
 
-## Sync data across machines
+## Configuration
 
-All data lives in **`~/.workbrain/`**:
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORKBRAIN_HOME` | `~/.workbrain` | Data directory (playbook, database) |
+| `WORKBRAIN_ROOT` | — | Path to the work-brain repo; required for git hooks |
+
+### Data directory layout
 
 ```
 ~/.workbrain/
-  data.db       ← agenda, work log, commits
-  playbook.md   ← how you work
+├── playbook.md    # How you work (markdown)
+├── data.db        # Agenda, work log, commits (SQLite)
+└── git-template/  # Git hook template (created by install)
 ```
 
-To sync between laptop and desktop:
-
-| Method | How |
-|--------|-----|
-| **iCloud/Dropbox** | Symlink: `ln -s ~/Library/Mobile Documents/.../workbrain ~/.workbrain` |
-| **Git (private dotfiles repo)** | Track `playbook.md`; export/import `data.db` periodically |
-| **Manual** | Copy `~/.workbrain/` when switching machines |
-
-Set a custom data dir on any machine:
+### Custom data directory
 
 ```bash
 export WORKBRAIN_HOME=/path/to/shared/workbrain-data
-claude mcp add --scope user workbrain -- env WORKBRAIN_HOME=/path/to/shared/workbrain-data node ~/work-brain/src/index.js
+claude mcp add --scope user workbrain -- \
+  env WORKBRAIN_HOME=/path/to/shared/workbrain-data \
+  node ~/work-brain/src/index.js
 ```
 
 ---
 
-## Claude Code in Cursor (your setup)
+## Git integration
 
-This uses **Claude Code MCP**, not Cursor's `~/.cursor/mcp.json`.
+`node bin/install.js` configures a global git template so **new repositories** automatically include the post-commit hook.
 
-1. Install the **Claude Code** extension in Cursor
-2. Open integrated terminal
-3. Run `claude mcp add` (see above)
-4. In Claude panel: `/mcp` → enable workbrain
-
-Ask in chat:
-- "What's my focus this week?"
-- "Mark CSV export as in progress"
-- "What did I work on last 7 days?"
-- "How do I usually approach bugs?" → reads playbook
-
----
-
-## Optional: record commits automatically
-
-Set `WORKBRAIN_ROOT` to your install path:
+For an **existing repository**:
 
 ```bash
-export WORKBRAIN_ROOT=/path/to/work-brain
-cp $WORKBRAIN_ROOT/hooks/post-commit .git/hooks/post-commit
-chmod +x .git/hooks/post-commit
+export WORKBRAIN_ROOT=/path/to/work-brain   # in ~/.zshrc
+node /path/to/work-brain/bin/setup-git-hook.js /path/to/repo
 ```
+
+Each commit records hash, repo, branch, message, and files changed into `~/.workbrain/data.db`.
 
 ---
 
-## Project-level config (team / per-repo)
+## Multi-machine setup
 
-Create `.mcp.json` at project root:
+Clone and register on each machine:
 
-```json
-{
-  "mcpServers": {
-    "workbrain": {
-      "command": "node",
-      "args": ["/absolute/path/to/work-brain/src/index.js"]
-    }
-  }
-}
+```bash
+git clone https://github.com/himanshu-sharma-55/work-brain.git ~/work-brain
+cd ~/work-brain && npm install && node bin/install.js
+claude mcp add --scope user workbrain -- node ~/work-brain/src/index.js
 ```
 
-Commit this so the same server is available in that project. Approve on first run when Claude asks.
+Each machine maintains its own `~/.workbrain/` by default. To sync data:
+
+| Method | Approach |
+|--------|----------|
+| Cloud folder | Symlink `~/.workbrain` to iCloud, Dropbox, etc. |
+| Dotfiles repo | Track `playbook.md`; copy `data.db` periodically |
+| Shared path | Set `WORKBRAIN_HOME` to the same location on both machines |
+
+---
+
+## Cursor setup
+
+Workbrain uses **Claude Code MCP**, not Cursor's `~/.cursor/mcp.json`.
+
+1. Install the Claude Code extension in Cursor
+2. Open the integrated terminal
+3. Run `claude mcp add` (see [Quick start](#quick-start))
+4. In the Claude panel: `/mcp` → enable **workbrain**
+
+---
+
+## Privacy & scope
+
+Workbrain is designed for **individual use**:
+
+- MCP is registered with `--scope user` — not tied to any project repo
+- Personal data never leaves your machine unless you sync it yourself
+- Do not commit `.mcp.json` to shared team repositories
 
 ---
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| `claude` not found | Install [Claude Code CLI](https://code.claude.com) or use extension's terminal |
-| Server not in `/mcp` | Re-run `claude mcp add --scope user workbrain -- ...` |
-| Wrong path after move | `claude mcp remove workbrain` then add again with new path |
-| Check logs | Claude Code → `/mcp` → reconnect; run server manually: `node src/index.js` (waits on stdio) |
+| Issue | Resolution |
+|-------|------------|
+| `claude` command not found | Install [Claude Code CLI](https://code.claude.com) or use the extension terminal |
+| Server missing from `/mcp` | Re-run `claude mcp add --scope user workbrain -- node /path/to/work-brain/src/index.js` |
+| Broken path after moving the repo | `claude mcp remove workbrain`, then re-add with the updated path |
+| Commits not recording | Verify `echo $WORKBRAIN_ROOT` and that `.git/hooks/post-commit` exists |
+| Server won't start | Run `node src/index.js` manually; check Node version (`node -v` ≥ 22) |
 
 ---
 
-## Data directory
+## Development
 
-Default: `~/.workbrain/`  
-Override: `WORKBRAIN_HOME=/custom/path`
+```bash
+npm install
+npm start              # run MCP server (stdio)
+npm run install:local  # install + init data dir + git template
+npm run status         # CLI status check
+```
+
+For local development with a global CLI alias:
+
+```bash
+cd work-brain && npm link
+claude mcp add --scope user workbrain -- workbrain
+```
+
+---
+
+## Naming
+
+| Name | Used for |
+|------|----------|
+| `work-brain` | GitHub repository and local clone directory |
+| `workbrain` | MCP server name, npm package, data dir (`~/.workbrain`) |
+| `WORKBRAIN_*` | Environment variable prefix |
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE).
+[LICENSE](LICENSE)

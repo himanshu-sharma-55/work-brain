@@ -4,18 +4,34 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   addAgendaItem,
+  deleteAgendaItem,
   getAgenda,
   getCommits,
+  getContext,
   getPlaybook,
+  getWeeklySummary,
   getWorkLog,
   logWork,
+  rolloverAgenda,
   updateAgendaItem,
+  updatePlaybook,
 } from "./store.js";
 
 const server = new McpServer({
   name: "workbrain",
-  version: "0.1.0",
+  version: "0.2.0",
 });
+
+server.tool(
+  "get_context",
+  "Get full personal context in one call: playbook, this week's agenda, recent work log, and commits. Call at session start.",
+  {
+    days: z.number().int().min(1).max(90).default(7).describe("Days of work history and commits to include."),
+  },
+  async ({ days }) => ({
+    content: [{ type: "text", text: JSON.stringify(getContext({ days }), null, 2) }],
+  })
+);
 
 server.tool(
   "get_playbook",
@@ -23,6 +39,18 @@ server.tool(
   {},
   async () => ({
     content: [{ type: "text", text: getPlaybook() }],
+  })
+);
+
+server.tool(
+  "update_playbook",
+  "Update the personal playbook. Use append=true to add a section without replacing the whole file.",
+  {
+    content: z.string(),
+    append: z.boolean().default(false),
+  },
+  async ({ content, append }) => ({
+    content: [{ type: "text", text: JSON.stringify(updatePlaybook({ content, append }), null, 2) }],
   })
 );
 
@@ -56,7 +84,7 @@ server.tool(
 
 server.tool(
   "update_agenda_item",
-  "Update an agenda item: status, estimate, title, etc.",
+  "Update an agenda item: status, estimate, title, etc. Marking done auto-logs work unless log_on_done=false.",
   {
     id: z.number().int(),
     title: z.string().optional(),
@@ -65,9 +93,44 @@ server.tool(
     status: z.enum(["not_started", "in_progress", "done", "deferred"]).optional(),
     project: z.string().optional(),
     notes: z.string().optional(),
+    log_on_done: z.boolean().default(true),
   },
   async (args) => ({
     content: [{ type: "text", text: JSON.stringify(updateAgendaItem(args), null, 2) }],
+  })
+);
+
+server.tool(
+  "delete_agenda_item",
+  "Remove an item from the weekly agenda.",
+  {
+    id: z.number().int(),
+  },
+  async ({ id }) => ({
+    content: [{ type: "text", text: JSON.stringify(deleteAgendaItem(id), null, 2) }],
+  })
+);
+
+server.tool(
+  "rollover_agenda",
+  "Move unfinished items from a previous week into the current week (defaults: last week → this week).",
+  {
+    from_week: z.string().optional().describe("Source week start YYYY-MM-DD."),
+    to_week: z.string().optional().describe("Target week start YYYY-MM-DD."),
+  },
+  async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(rolloverAgenda(args), null, 2) }],
+  })
+);
+
+server.tool(
+  "get_weekly_summary",
+  "Summary for a week: agenda stats, work log entries, and commits for that week.",
+  {
+    week: z.string().optional().describe("Week start date YYYY-MM-DD (Monday). Defaults to current week."),
+  },
+  async ({ week }) => ({
+    content: [{ type: "text", text: JSON.stringify(getWeeklySummary({ week }), null, 2) }],
   })
 );
 
@@ -91,6 +154,7 @@ server.tool(
     type: z.enum(["bug", "feature", "enhancement", "explore", "admin"]).optional(),
     project: z.string().optional(),
     commit_hash: z.string().optional(),
+    agenda_item_id: z.number().int().optional().describe("Link this entry to an agenda item."),
   },
   async (args) => ({
     content: [{ type: "text", text: JSON.stringify(logWork(args), null, 2) }],

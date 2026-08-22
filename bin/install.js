@@ -10,6 +10,8 @@ const ROOT = path.resolve(__dirname, "..");
 const NODE = process.execPath;
 const SERVER = path.join(ROOT, "src", "index.js");
 const DATA_DIR = path.join(os.homedir(), ".workbrain");
+const GIT_TEMPLATE_DIR = path.join(DATA_DIR, "git-template");
+const GIT_HOOKS_DIR = path.join(GIT_TEMPLATE_DIR, "hooks");
 
 function run(cmd) {
   console.log(`> ${cmd}`);
@@ -28,7 +30,20 @@ if (!fs.existsSync(playbook)) {
   console.log(`Created ${playbook}`);
 }
 
+fs.mkdirSync(GIT_HOOKS_DIR, { recursive: true });
+const templateHook = path.join(GIT_HOOKS_DIR, "post-commit");
+fs.copyFileSync(path.join(ROOT, "hooks", "post-commit"), templateHook);
+fs.chmodSync(templateHook, 0o755);
+
+try {
+  execSync(`git config --global init.templateDir "${GIT_TEMPLATE_DIR}"`, { stdio: "inherit" });
+  console.log(`Git template dir: ${GIT_TEMPLATE_DIR}`);
+} catch {
+  console.log(`Could not set git init.templateDir — run manually if needed.`);
+}
+
 const mcpCmd = `claude mcp add --scope user workbrain -- ${NODE} ${SERVER}`;
+const shellRc = process.env.SHELL?.includes("zsh") ? "~/.zshrc" : "~/.bashrc";
 
 console.log(`
 Installed to: ${ROOT}
@@ -41,11 +56,18 @@ Register with Claude Code (run once per machine):
 Then in Claude Code panel, type:  /mcp
 Confirm workbrain shows connected.
 
-Optional — auto-record commits in a repo:
+Add to ${shellRc} (once per machine):
 
   export WORKBRAIN_ROOT=${ROOT}
-  cp ${path.join(ROOT, "hooks", "post-commit")} .git/hooks/post-commit
-  chmod +x .git/hooks/post-commit
+
+New git repos auto-get the commit hook via init.templateDir.
+Existing repo:
+
+  node ${path.join(ROOT, "bin", "setup-git-hook.js")} /path/to/repo
+
+Terminal status (no Claude needed):
+
+  node ${path.join(ROOT, "bin", "workbrain.js")} status
 
 Edit your playbook:  ${playbook}
 `);

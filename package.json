@@ -1,11 +1,15 @@
 {
   "name": "workbrain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP server: playbook, weekly agenda, and work log for Claude Code",
   "type": "module",
+  "bin": {
+    "workbrain": "bin/workbrain.js"
+  },
   "scripts": {
     "start": "node src/index.js",
-    "install:local": "node bin/install.js"
+    "install:local": "node bin/install.js",
+    "status": "node bin/workbrain.js status"
   },
   "engines": {
     "node": ">=22"

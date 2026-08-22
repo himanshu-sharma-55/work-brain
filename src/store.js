@@ -70,7 +70,7 @@ export function addAgendaItem({ title, type = "focus", estimate, project, notes,
   return get(`SELECT * FROM agenda_items WHERE id = ?`, [result.lastInsertRowid]);
 }
 
-export function updateAgendaItem({ id, title, type, estimate, status, project, notes }) {
+export function updateAgendaItem({ id, title, type, estimate, status, project, notes, log_on_done = true }) {
   const existing = get(`SELECT * FROM agenda_items WHERE id = ?`, [id]);
   if (!existing) {
     throw new Error(`Agenda item ${id} not found`);
@@ -89,7 +89,62 @@ export function updateAgendaItem({ id, title, type, estimate, status, project, n
     [title ?? null, type ?? null, estimate ?? null, status ?? null, project ?? null, notes ?? null, id]
   );
 
-  return get(`SELECT * FROM agenda_items WHERE id = ?`, [id]);
+  const updated = get(`SELECT * FROM agenda_items WHERE id = ?`, [id]);
+  let work_entry = null;
+
+  if (log_on_done && status === "done" && existing.status !== "done") {
+    const alreadyLogged = get(
+      `SELECT id FROM work_entries WHERE agenda_item_id = ? LIMIT 1`,
+      [id]
+    );
+    if (!alreadyLogged) {
+      work_entry = logWork({
+        summary: `Completed: ${updated.title}`,
+        project: updated.project,
+        agenda_item_id: id,
+      });
+    }
+  }
+
+  return work_entry ? { ...updated, work_entry } : updated;
+}
+
+export function deleteAgendaItem(id) {
+  const existing = get(`SELECT * FROM agenda_items WHERE id = ?`, [id]);
+  if (!existing) {
+    throw new Error(`Agenda item ${id} not found`);
+  }
+  run(`DELETE FROM agenda_items WHERE id = ?`, [id]);
+  return { deleted: existing };
+}
+
+export function rolloverAgenda({ from_week, to_week } = {}) {
+  const currentWeek = weekStart();
+  const prevDate = new Date(`${currentWeek}T00:00:00`);
+  prevDate.setDate(prevDate.getDate() - 7);
+  const sourceWeek = from_week || weekStart(prevDate);
+  const targetWeek = to_week || currentWeek;
+
+  const unfinished = all(
+    `SELECT * FROM agenda_items
+     WHERE week_start = ? AND status NOT IN ('done', 'deferred')`,
+    [sourceWeek]
+  );
+
+  for (const item of unfinished) {
+    run(
+      `UPDATE agenda_items SET week_start = ?, updated_at = datetime('now') WHERE id = ?`,
+      [targetWeek, item.id]
+    );
+  }
+
+  return {
+    from_week: sourceWeek,
+    to_week: targetWeek,
+    items: unfinished.map((item) =>
+      get(`SELECT * FROM agenda_items WHERE id = ?`, [item.id])
+    ),
+  };
 }
 
 export function getWorkLog({ days = 7, project } = {}) {
@@ -105,11 +160,11 @@ export function getWorkLog({ days = 7, project } = {}) {
   return all(query, params);
 }
 
-export function logWork({ summary, type, project, commit_hash }) {
+export function logWork({ summary, type, project, commit_hash, agenda_item_id }) {
   const result = run(
-    `INSERT INTO work_entries (summary, type, project, commit_hash)
-     VALUES (?, ?, ?, ?)`,
-    [summary, type ?? null, project ?? null, commit_hash ?? null]
+    `INSERT INTO work_entries (summary, type, project, commit_hash, agenda_item_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [summary, type ?? null, project ?? null, commit_hash ?? null, agenda_item_id ?? null]
   );
 
   return get(`SELECT * FROM work_entries WHERE id = ?`, [result.lastInsertRowid]);
@@ -137,4 +192,68 @@ export function getCommits({ days = 7 } = {}) {
      ORDER BY committed_at DESC`,
     [`-${days} days`]
   );
+}
+
+export function getContext({ days = 7 } = {}) {
+  const agenda = getAgenda();
+  const work_log = getWorkLog({ days });
+  const commits = getCommits({ days });
+
+  return {
+    playbook: getPlaybook(),
+    week_start: agenda.week_start,
+    agenda,
+    work_log,
+    commits,
+    summary: {
+      focus_total: agenda.items.filter((i) => i.type === "focus").length,
+      focus_done: agenda.items.filter((i) => i.type === "focus" && i.status === "done").length,
+      in_progress: agenda.items.filter((i) => i.status === "in_progress").length,
+      work_entries: work_log.length,
+      commits: commits.length,
+    },
+  };
+}
+
+export function getWeeklySummary({ week } = {}) {
+  const targetWeek = week || weekStart();
+  const agenda = getAgenda({ week: targetWeek });
+  const work_log = all(
+    `SELECT * FROM work_entries
+     WHERE date(created_at) >= date(?) AND date(created_at) < date(?, '+7 days')
+     ORDER BY created_at DESC`,
+    [targetWeek, targetWeek]
+  );
+  const commits = all(
+    `SELECT * FROM commits
+     WHERE date(committed_at) >= date(?) AND date(committed_at) < date(?, '+7 days')
+     ORDER BY committed_at DESC`,
+    [targetWeek, targetWeek]
+  );
+
+  const items = agenda.items;
+  return {
+    week_start: targetWeek,
+    agenda: {
+      total: items.length,
+      done: items.filter((i) => i.status === "done").length,
+      in_progress: items.filter((i) => i.status === "in_progress").length,
+      not_started: items.filter((i) => i.status === "not_started").length,
+      deferred: items.filter((i) => i.status === "deferred").length,
+      items,
+    },
+    work_log,
+    commits,
+  };
+}
+
+export function updatePlaybook({ content, append = false }) {
+  ensureDataDir();
+  if (append) {
+    const existing = getPlaybook();
+    fs.writeFileSync(PLAYBOOK_PATH, `${existing.trimEnd()}\n\n${content.trim()}\n`, "utf8");
+  } else {
+    fs.writeFileSync(PLAYBOOK_PATH, content, "utf8");
+  }
+  return { path: PLAYBOOK_PATH, content: fs.readFileSync(PLAYBOOK_PATH, "utf8") };
 }
