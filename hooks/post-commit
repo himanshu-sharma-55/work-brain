@@ -1,0 +1,11 @@
+#!/bin/sh
+# Copy to .git/hooks/post-commit and chmod +x
+# Set WORKBRAIN_ROOT to your workbrain install directory.
+
+: "${WORKBRAIN_ROOT:?Set WORKBRAIN_ROOT to your workbrain install path}"
+
+NODE="${WORKBRAIN_NODE:-node}"
+SCRIPT="$WORKBRAIN_ROOT/hooks/record-commit.js"
+
+[ -f "$SCRIPT" ] || exit 0
+"$NODE" "$SCRIPT" || true
