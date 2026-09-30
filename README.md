@@ -207,7 +207,9 @@ Each commit records hash, repo, branch, message, and files changed into `~/.work
 node "$WORKBRAIN_ROOT/hooks/record-commit.js" || true
 ```
 
-Confirm with `git config core.hooksPath` — if it prints `.husky`, use the path above instead of `setup-git-hook.js`.
+Confirm with `git config core.hooksPath`. If it points into `.husky` (husky v9 prints `.husky/_`), use the path above instead of `setup-git-hook.js`.
+
+To keep it personal, add `.husky/post-commit` to `.git/info/exclude` so it's never committed.
 
 ---
 
@@ -260,7 +262,7 @@ Workbrain is designed for **individual use**:
 | `claude` command not found | Install [Claude Code CLI](https://code.claude.com) or use the extension terminal |
 | Server missing from `/mcp` | Re-run `claude mcp add --scope user workbrain -- node /path/to/work-brain/src/index.js` |
 | Broken path after moving the repo | `claude mcp remove workbrain`, then re-add with the updated path |
-| Commits not recording / `0 commits` | Verify `WORKBRAIN_ROOT` is set. If the repo uses husky (`git config core.hooksPath` → `.husky`), put the hook in `.husky/post-commit` — not `.git/hooks/` |
+| Commits not recording / `0 commits` | Verify `WORKBRAIN_ROOT` is set. If `git config core.hooksPath` points into `.husky` (v9: `.husky/_`), put the hook in `.husky/post-commit` — not `.git/hooks/`. Keep it personal with `.git/info/exclude`. |
 | Server won't start | Run `node src/index.js` manually; check Node version (`node -v` ≥ 22) |
 
 ---
