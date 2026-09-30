@@ -231,14 +231,15 @@ Each machine maintains its own `~/.workbrain/` by default. To sync data:
 
 ---
 
-## Cursor setup
+## Connect Claude Code
 
-Workbrain uses **Claude Code MCP**, not Cursor's `~/.cursor/mcp.json`.
+Workbrain registers as a **user-scoped MCP server** via the Claude Code CLI. That works the same whether you run Claude Code in the terminal, VS Code, or Cursor.
 
-1. Install the Claude Code extension in Cursor
-2. Open the integrated terminal
-3. Run `claude mcp add` (see [Quick start](#quick-start))
-4. In the Claude panel: `/mcp` → enable **workbrain**
+1. Install [Claude Code](https://code.claude.com) (CLI and/or editor extension)
+2. Run `claude mcp add` from [Quick start](#quick-start)
+3. In Claude Code, type `/mcp` and enable **workbrain**
+
+Workbrain does not use editor-specific MCP config files (for example Cursor's `~/.cursor/mcp.json`). Keep registration on `--scope user` so it follows you across projects.
 
 ---
 
