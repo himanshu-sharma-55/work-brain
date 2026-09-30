@@ -2,6 +2,10 @@
 
 **Your personal operating layer for AI-assisted work.**
 
+<p align="center">
+  <img src="docs/workbrain-hero.jpg" alt="Workbrain status: weekly agenda, focus progress, and recent work log" width="800" />
+</p>
+
 Workbrain is a local [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for [Claude Code](https://code.claude.com). It gives Claude persistent context about how you work, what you're focused on this week, and what you've shipped — without sending that data to the cloud or sharing it with your team.
 
 ---
@@ -55,10 +59,16 @@ Register the MCP server (server name is `workbrain`; repo folder is `work-brain`
 claude mcp add --scope user workbrain -- node /absolute/path/to/work-brain/src/index.js
 ```
 
-Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+Set `WORKBRAIN_ROOT` once per machine:
 
 ```bash
+# macOS / Linux — add to ~/.zshrc or ~/.bashrc
 export WORKBRAIN_ROOT=/absolute/path/to/work-brain
+```
+
+```powershell
+# Windows PowerShell (persists for new terminals)
+setx WORKBRAIN_ROOT "C:\path\to\work-brain"
 ```
 
 Verify in Claude Code: type `/mcp` and confirm **workbrain** is connected.
@@ -180,11 +190,24 @@ claude mcp add --scope user workbrain -- \
 For an **existing repository**:
 
 ```bash
-export WORKBRAIN_ROOT=/path/to/work-brain   # in ~/.zshrc
+export WORKBRAIN_ROOT=/path/to/work-brain   # macOS/Linux shell profile
+# Windows: setx WORKBRAIN_ROOT "C:\path\to\work-brain"
 node /path/to/work-brain/bin/setup-git-hook.js /path/to/repo
 ```
 
 Each commit records hash, repo, branch, message, and files changed into `~/.workbrain/data.db`.
+
+### Using husky?
+
+`setup-git-hook.js` writes to `.git/hooks/post-commit`. Repos that use [husky](https://typicode.github.io/husky/) set `core.hooksPath` to `.husky/`, so Git **ignores** `.git/hooks/` and commits will not be recorded (you'll see `0 commits` in status).
+
+**Fix:** add (or append) this line in `.husky/post-commit`:
+
+```sh
+node "$WORKBRAIN_ROOT/hooks/record-commit.js" || true
+```
+
+Confirm with `git config core.hooksPath` — if it prints `.husky`, use the path above instead of `setup-git-hook.js`.
 
 ---
 
@@ -236,7 +259,7 @@ Workbrain is designed for **individual use**:
 | `claude` command not found | Install [Claude Code CLI](https://code.claude.com) or use the extension terminal |
 | Server missing from `/mcp` | Re-run `claude mcp add --scope user workbrain -- node /path/to/work-brain/src/index.js` |
 | Broken path after moving the repo | `claude mcp remove workbrain`, then re-add with the updated path |
-| Commits not recording | Verify `echo $WORKBRAIN_ROOT` and that `.git/hooks/post-commit` exists |
+| Commits not recording / `0 commits` | Verify `WORKBRAIN_ROOT` is set. If the repo uses husky (`git config core.hooksPath` → `.husky`), put the hook in `.husky/post-commit` — not `.git/hooks/` |
 | Server won't start | Run `node src/index.js` manually; check Node version (`node -v` ≥ 22) |
 
 ---
